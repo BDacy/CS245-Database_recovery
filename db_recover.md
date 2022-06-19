@@ -72,7 +72,7 @@ Storage Manager 采用异步持久化更新数据，注意：在写相同key时�
 #### 日志格式
 对日志的格式进行规定如下
 
-![日志格式](./Record结构图.png)
+![日志格式](https://github.com/BDacy/CS245-Database_recovery/edit/main/Record结构图.png)
 对各个字段的解释如下：
 len:该条record日志的长度
 txID:事务ID
