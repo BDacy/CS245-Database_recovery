@@ -72,13 +72,13 @@ Storage Manager 采用异步持久化更新数据，注意：在写相同key时�
 #### 日志格式
 对日志的格式进行规定如下
 
-![日志格式](https://github.com/BDacy/CS245-Database_recovery/edit/main/Record结构图.png)
+![日志格式](./Record.png)
 对各个字段的解释如下：
-len:该条record日志的长度
-txID:事务ID
-type:该条日志的类型，0-write;1-commit
-key:某个变量
-value:key的更新值
+len(int 4字节):该条record日志的长度
+txID(long 8字节):事务ID
+type(byte 1字节):该条日志的类型，0-write;1-commit
+key(long 8字节):某个变量
+value(byte[] x个字节):key的更新值
 
 日志有两种类型，写类型和提交类型，对应record中type的取值0和1;
 写类型日志如上图
