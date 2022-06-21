@@ -191,22 +191,6 @@ public class TransactionManager {
 				persisted.add(tag);
 			}
 		}
-//		while (logOffset<lm.getLogEndOffset()){
-//			byte[] bytes = lm.readLogRecord(logOffset, Integer.BYTES);
-//			ByteBuffer bb = ByteBuffer.wrap(bytes);
-//			int len=bb.getInt();
-//			//知道该条日志的偏移量
-//			byte[] R_bytes = lm.readLogRecord(logOffset, len);
-//			//得到该条日志记录
-//			Record record = Record.deserialize(R_bytes);
-//			//写入StorageManager
-//			sm.queueWrite(record.key, logOffset+len,record.value);
-//			persisted.add(logOffset+len);
-//			//更新latestValues
-//			latestValues.put(record.key, new TaggedValue(logOffset+len, record.value));
-//			logOffset+=len;
-//			MaxTxID=record.txID;
-//		}
 
 	}
 
@@ -225,6 +209,8 @@ public class TransactionManager {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+		//当这里的start不做操作时InterleavedTransactionManagerTests.java测试是可以通过的
+		//虽然并不能理解测试的内容是什么
 	}
 
 	/**
@@ -313,18 +299,6 @@ public class TransactionManager {
 	 */
 	public void writePersisted(long key, long persisted_tag, byte[] persisted_value) {
 //		int logTruncationOffset = lm.getLogTruncationOffset();
-
-//		OffsetSet.add((int)persisted_tag);
-//		while (!OffsetSet.isEmpty()){
-//			Integer min = OffsetSet.first();
-//			if (min==logTruncationOffset){
-//				byte[] bytes = lm.readLogRecord(min, Integer.BYTES);
-//				ByteBuffer bb = ByteBuffer.wrap(bytes);
-//				int len=bb.getInt();
-//				lm.setLogTruncationOffset(logTruncationOffset+len);
-//				OffsetSet.pollFirst();
-//			}else break;
-//		}
 
 		//添加persisted_tag到OffsetSet中
 		OffsetSet.add((int)persisted_tag);
