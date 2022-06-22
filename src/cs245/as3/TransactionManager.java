@@ -119,9 +119,9 @@ public class TransactionManager {
 	private StorageManager sm;
 	//	记录当前的最大事务id，以确保下个start事务的合法性
 	private long MaxTxID;
-	// 	在writePersisted方法中使用
+	// 	在writePersisted方法中使用,主要记录更新sm中persisted_version的日志的偏移量
 	private HashSet<Integer> OffsetSet;
-	// 	存放已经进行持久化的日志record在lm中的偏移量
+	// 	存放已经进行更新latest_version的日志record在lm中的偏移量
 	private PriorityQueue<Integer> persisted;
 	// 	key-txID,value-record日志集合
 	private Map<Long,ArrayList<Record>> RecordMap;
