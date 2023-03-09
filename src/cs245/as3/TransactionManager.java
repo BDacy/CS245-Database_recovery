@@ -107,25 +107,31 @@ public class TransactionManager {
 	/**
 	  * Holds the latest value for each key.
 	 * 保存每个键的最新值。
+	 * key—value为数据存储的键值对数据
 	  */
 	private HashMap<Long, TaggedValue> latestValues;
 	/**
 	  * Hold on to writesets until commit.
 	 * 保存某事物的写操作，直到它被提交
+	 * 进行写操作但是未进行提交的写操作会放在这个map中
+	 * key - 事务ID， value - 事务ID下进行的写操作
 	  */
 	private HashMap<Long, ArrayList<WritesetEntry>> writesets;
 
 	private LogManager lm;
 	private StorageManager sm;
-	//	记录当前的最大事务id，以确保下个start事务的合法性
+	//	记录当前的最大事务id，以确保下个start事务的合法性，抱着事务ID是单调递增的
 	private long MaxTxID;
 	// 	在writePersisted方法中使用,主要记录更新sm中persisted_version的日志的偏移量
-	private HashSet<Integer> OffsetSet;
-	// 	存放已经进行更新latest_version的日志record在lm中的偏移量
-	private PriorityQueue<Integer> persisted;
-	// 	key-txID,value-record日志集合
-	private Map<Long,ArrayList<Record>> RecordMap;
+	private final HashSet<Integer> OffsetSet;
+	// 	存放已经进行更新latest_version的日志record在lm中的偏移量(已提交的事务在日志中的偏移量)
+	private final PriorityQueue<Integer> persisted;
+	// 	key-txID,value-record日志集合，和writesets一样存放写操作，但是存放的是写日志
+	private final Map<Long,ArrayList<Record>> RecordMap;
 
+	/**
+	 * 初始化
+	 */
 	public TransactionManager() {
 		writesets = new HashMap<>();
 		//see initAndRecover
@@ -133,6 +139,7 @@ public class TransactionManager {
 		OffsetSet=new HashSet<>();
 		persisted=new PriorityQueue<>();
 		RecordMap=new HashMap<>();
+		// 事务ID从0开始
 		MaxTxID=-1;
 	}
 
@@ -152,11 +159,12 @@ public class TransactionManager {
 
 		//存储自截断点以后的所有日志
 		ArrayList<Record> Records = new ArrayList<>();
-		//每条日志的偏移量(也就是日志尾巴的在lm的偏移量)
+		//自截断点以后的每条日志的偏移量(也就是日志尾巴的在lm的偏移量)
 		ArrayList<Integer> tags = new ArrayList<>();
-		//存放已提交事务事务id-txID
+		//存放已提交事务的事务id-txID
 		Set<Long> txCommit = new HashSet<>();
 
+		// 获取上次截断点的偏移量
 		int logOffset=lm.getLogTruncationOffset();
 
 		//从截断点读取日志record
@@ -165,29 +173,35 @@ public class TransactionManager {
 			//解析前4位获取此record日志的长度再进行日志的整条读取。
 			byte[] bytes = lm.readLogRecord(logOffset, Integer.BYTES);
 			ByteBuffer bb = ByteBuffer.wrap(bytes);
-			//获取该条日志的偏移量
+			//获取该条日志的长度
 			int len=bb.getInt();
+			// 读取对应长度日志
 			byte[] R_bytes = lm.readLogRecord(logOffset, len);
-			//得到该条日志记录
+			//解析得到该条日志记录
 			Record record = Record.deserialize(R_bytes);
 
+			// 计入截断点以后的日志集合中
 			Records.add(record);
+			// 指针指向下一个日志的开头，
 			logOffset+=record.len;
 			tags.add(logOffset);
 
-			//记录已提交事务，为后续恢复做准备
+			// 如果读取的record是提交类型日志，进行记录，放入txCommit集合中
 			if (record.type==1){
 				txCommit.add(record.txID);
 			}
 		}
 
-		//遍历日志，执行txCommit里的事务
+		//遍历截断点后的所有日志，如果是txCommit里的事务且是写操作，则执行一遍
 		for (int i = 0; i < Records.size(); i++) {
 			Record record = Records.get(i);
-			if (txCommit.contains(record.txID)&&record.type==0){
+			if (txCommit.contains(record.txID) && record.type == 0){
 				Integer tag = tags.get(i);
+				// 更新最新值数据
 				latestValues.put(record.key, new TaggedValue(tag,record.value));
-				sm.queueWrite(record.key, tag,record.value);
+				// 写入磁盘
+				sm.queueWrite(record.key, tag, record.value);
+				// 记录完成有效写操作的日志的偏移量
 				persisted.add(tag);
 			}
 		}
@@ -202,13 +216,13 @@ public class TransactionManager {
 	public void start(long txID) {
 		// TODO: Not implemented for non-durable transactions, you should implement this
 		// 检查上一条事务id，该事务id是否大于上一条事务id
-		if (txID>MaxTxID){
-			MaxTxID=txID;
-		}else try {
-			throw new Exception("txid is not allow");
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+//		if (txID>MaxTxID){
+//			MaxTxID=txID;
+//		}else try {
+//			throw new Exception("txid is not allow");
+//		} catch (Exception e) {
+//			e.printStackTrace();
+//		}
 		//当这里的start不做操作时InterleavedTransactionManagerTests.java测试是可以通过的
 		//虽然并不能理解测试的内容是什么
 	}
@@ -231,19 +245,11 @@ public class TransactionManager {
 	 * 在我们写入该键后，从txID本身到相同的键。
 	 */
 	public void write(long txID, long key, byte[] value) {
-		ArrayList<WritesetEntry> writeset = writesets.get(txID);
-		if (writeset == null) {
-			writeset = new ArrayList<>();
-			writesets.put(txID, writeset);
-		}
+		ArrayList<WritesetEntry> writeset = writesets.computeIfAbsent(txID, k -> new ArrayList<>());
 		writeset.add(new WritesetEntry(key, value));
 
 		//记录写操作日志到RecordMap中
-		ArrayList<Record> records = RecordMap.get(txID);
-		if (records == null) {
-			records = new ArrayList<>();
-			RecordMap.put(txID, records);
-		}
+		ArrayList<Record> records = RecordMap.computeIfAbsent(txID, k -> new ArrayList<>());
 		records.add(new Record((byte)0,txID,key,value));
 	}
 	/**
@@ -269,6 +275,7 @@ public class TransactionManager {
 				keyToTag.put(record.key,tag);
 			}
 		}
+		RecordMap.remove(txID);
 
 		ArrayList<WritesetEntry> writeset = writesets.get(txID);
 		if (writeset != null) {
@@ -298,7 +305,6 @@ public class TransactionManager {
 	 * These calls are in order of writes to a key and will occur once for every such queued write, unless a crash occurs.
 	 */
 	public void writePersisted(long key, long persisted_tag, byte[] persisted_value) {
-//		int logTruncationOffset = lm.getLogTruncationOffset();
 
 		//添加persisted_tag到OffsetSet中
 		OffsetSet.add((int)persisted_tag);
